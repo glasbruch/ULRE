@@ -2,7 +2,7 @@
 
 This repository contains the official implementation of our paper "Uncertainty-Aware Likelihood Ratio Estimation for Pixel-Wise Out-of-Distribution Detection"
 
-![Teaser](teaser.png)
+![Teaser](teaser.PNG)
 
 ## Installation
 Coming soon.
