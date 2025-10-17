@@ -5,9 +5,18 @@ This repository contains the official implementation of our paper "Uncertainty-A
 ![Teaser](teaser.PNG)
 
 ## Installation
-Coming soon.
+### Install Dependencies
+```sh
+conda env create -f environment.yml
+```
+### Prepare Datasets
+Follow instructions at https://github.com/yyliu01/RPL/blob/main/docs/installation.md
 
 ## Training
+Run training by executing:
+```sh
+sh code/train.sh
+```
 
 
 ## Acknowledgement

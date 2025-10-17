@@ -16,8 +16,6 @@ from model.mynn import initialize_weights
 from model.hook_network import Network
 from model.classifier import Classifier, SNGPBlock
 
-from transformers import Dinov2Model
-
 from config.config import config
 
 from dataset import blending_data_loader
@@ -26,7 +24,6 @@ from dataset.validation.fishyscapes import Fishyscapes
 from dataset.validation.segment_me_if_you_can import SegmentMeIfYouCan
 
 from loss import EDLLoss, BCELoss, FocalLoss, DiceLoss
-from regularizer import TVRegularization
 import torch.nn.functional as F
        
 def parse_args():
