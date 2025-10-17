@@ -66,23 +66,6 @@ class EDLLoss(nn.Module):
     
     def entropy(self, alpha, num_classes):
         # Differential Entropy
-        """
-        #sum_alpha = torch.sum(alpha, dim=1, keepdim=True)
-        sum_alpha = torch.sum(alpha, dim=1)
-
-        #print(f"sum: {sum_alpha.shape}")
-        log_B = torch.lgamma(alpha).sum(dim=-1) - torch.lgamma(sum_alpha)
-        #print(f"log b: {log_B.shape}")
-        #entropy = log_B + (sum_alpha - num_classes) * torch.digamma(sum_alpha) - ((alpha - 1) * torch.digamma(alpha)).sum(dim=-1)
-        digamma_alpha = torch.digamma(alpha)
-        #digamma_alpha0 = torch.digamma(sum_alpha).unsqueeze(-1)
-
-        # Compute (alpha - 1) * digamma(alpha) efficiently
-        second_term = (alpha - 1).mul(digamma_alpha).sum(dim=-1)
-
-        entropy = log_B + (sum_alpha - num_classes) * torch.digamma(sum_alpha) - second_term
-
-        return entropy"""
         # Calculate the sum of alpha for each parameter vector in the batch
         alpha_sum = alpha.sum(dim=1, keepdim=True)  # [batch_size, 1]
     
@@ -120,21 +103,6 @@ class EDLLoss(nn.Module):
         # Remove ignore index
         logits = logits[~void_mask]
 
-        # Undersample ID
-        """
-        ood_mask = target == 1
-        id_mask = torch.empty_like(ood_mask)
-
-        num_ood = len(logits[ood_mask])
-        num_id = len(logits[~ood_mask])
-        idxs = torch.randperm(num_id)[:num_ood]
-        mask = torch.zeros_like(ood_mask)
-        mask[ood_mask] = True
-        mask[idxs] = True
-        logits = logits[mask]
-        target = target[mask]
-        target_1hot = target_1hot[mask]"""
-
         if self.activation == "exp":
             alpha = torch.exp(logits) + 1.0
             # Prevent inf values
@@ -146,15 +114,11 @@ class EDLLoss(nn.Module):
         elif self.activation == "softplus":
             alpha = torch.nn.functional.softplus(logits) + 1.0
 
-        print(f"Alpha0: {alpha[:,0].min()} {alpha[:,0].max()}, mean: {alpha[:,0].mean()}")
-        print(f"Alpha1: {alpha[:,1].min()} {alpha[:,1].max()}, mean: {alpha[:,1].mean()}")
-
         S = alpha.sum(dim=1, keepdim=True)
 
         # Evidential log loss
         if self.log_loss:
             loss = torch.sum(target_1hot * (torch.log(S) - torch.log(alpha)), dim=1, keepdim=True) # KLD expects shape Nx1
-            #loss = torch.sum(target_1hot * (torch.log(S) - torch.log(alpha)), dim=1, keepdim=False)
         else:
             # MSE loss
             probs = alpha/S
@@ -167,28 +131,10 @@ class EDLLoss(nn.Module):
         kl_alpha = (alpha - 1) * (1 - target_1hot) + 1
         # Forward KLD
         kl_div = annealing_coef * self.kl_divergence(kl_alpha, self.num_classes)
-        # Reverse KLD
-        #kl_div = annealing_coef * self.reverse_kl_divergence(kl_alpha, self.num_classes)
 
         loss += self.beta * kl_div
 
-        # Entropy Regularization
-        #entropy = self.entropy(alpha, self.num_classes)
-        #loss -= self.beta * entropy
-
-        return loss.mean() #+ self.precision_reg * torch.mean(torch.log(S))
-    
-        """if self.cor_reg:
-            with torch.no_grad():
-                vacuity = self.num_classes / S.detach()
-            
-            cor_reg = vacuity * target_1hot * logits
-            cor_reg = cor_reg.sum() / cor_reg.shape[0]
-        else:
-            cor_reg = 0
-
-        #print(f"Correct reg: {cor_reg}")
-        return loss.mean() - cor_reg"""
+        return loss.mean()
 
 class IEDLLoss(nn.Module):
     def __init__(self, 
@@ -516,67 +462,6 @@ class DiceLoss(nn.Module):
             return dice_loss.sum()
         else:  # 'none'
             return dice_loss
-
-'''
-class DiceLoss(nn.Module):
-    """
-    DICE Loss for binary segmentation.
-    
-    The DICE coefficient measures the overlap between two binary masks:
-    DICE = 2 * |A ∩ B| / (|A| + |B|)
-    
-    DICE Loss = 1 - DICE coefficient
-    """
-    
-    def __init__(self, smooth=1e-6, reduction='mean'):
-        """
-        Args:
-            smooth (float): Smoothing factor to avoid division by zero
-            reduction (str): Specifies the reduction to apply to the output:
-                           'none' | 'mean' | 'sum'
-        """
-        super(DiceLoss, self).__init__()
-        self.smooth = smooth
-        self.reduction = reduction
-    
-    def forward(self, inputs, targets):
-        """
-        Args:
-            inputs (torch.Tensor): Predictions of shape (N, 1, H, W) or (N, H, W)
-                                 Can be logits or probabilities
-            targets (torch.Tensor): Ground truth of shape (N, 1, H, W) or (N, H, W)
-                                  Should contain binary values (0 or 1)
-        
-        Returns:
-            torch.Tensor: DICE loss
-        """
-        # Ensure inputs are probabilities (apply sigmoid if they appear to be logits)
-        if inputs.min() < 0 or inputs.max() > 1:
-            inputs = torch.sigmoid(inputs)
-        
-        # Flatten the tensors to compute intersection and union
-        inputs_flat = inputs.view(inputs.size(0), -1)  # (N, H*W)
-        targets_flat = targets.view(targets.size(0), -1)  # (N, H*W)
-        
-        # Compute intersection and union
-        intersection = (inputs_flat * targets_flat).sum(dim=1)  # (N,)
-        union = inputs_flat.sum(dim=1) + targets_flat.sum(dim=1)  # (N,)
-        
-        # Compute DICE coefficient
-        dice_coeff = (2.0 * intersection + self.smooth) / (union + self.smooth)
-        
-        # DICE loss is 1 - DICE coefficient
-        dice_loss = 1.0 - dice_coeff
-        
-        # Apply reduction
-        if self.reduction == 'mean':
-            return dice_loss.mean()
-        elif self.reduction == 'sum':
-            return dice_loss.sum()
-        else:  # 'none'
-            return dice_loss
-
-            '''
 
 if __name__ == "__main__":
     criterion = EDLLoss()
